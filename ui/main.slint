@@ -1,0 +1,233 @@
+export struct App {
+    icon: image,
+    command: string,
+    preferred-color: color,
+}
+
+
+component Tile inherits Rectangle {
+    in property <App> app;
+    in property <bool> selected;
+    in property <bool> highlighted;
+
+    border-radius: 4px;
+    background: app.preferred-color;
+    drop-shadow-color: highlighted ? teal : grey;
+    drop-shadow-blur: 12px;
+    accessible-role: AccessibleRole.list-item;
+    accessible-item-selectable: true;
+    accessible-item-selected <=> self.selected;
+
+    Image {
+        x: parent.height * 0.2;
+        y: parent.height * 0.2;
+        height: parent.height - parent.height * 0.4;
+        width: parent.width - parent.height * 0.4;
+        image-fit: contain;
+        source: app.icon;
+    }
+}
+
+component StatusText inherits Rectangle {
+    in property <string> text;
+    in property <length> font-size: 4rem;
+    in property <bool> selected;
+    height: 5rem;
+
+    Text {
+        x: 0;
+        vertical-alignment: center;
+        height: 5rem;
+        color: white;
+        font-size: parent.font-size;
+        font-weight: 200;
+        text: parent.text;
+    }
+
+    @children
+}
+
+component StatusIcon inherits Rectangle {
+    in property <image> image-source;
+    in property <bool> selected;
+
+    background: selected ? rgba(255,255,255, 0.4) : transparent;
+    drop-shadow-blur: 8px;
+    drop-shadow-color: selected ? rgba(255,255,255,0.4) : transparent;
+    border-radius: 16px;
+    height: 3rem;
+    width: 3rem;
+
+    Image {
+        height: 3rem;
+        source: image-source;
+        image-fit: contain;
+    }
+
+    @children
+}
+
+component StatusBar inherits HorizontalLayout {
+    in property <string> time-string: "12:48 PM";
+    in property <string> date-string: "August 6, 2024";
+    in property <length> margin;
+
+    callback focus-cleared();
+    callback exit();
+
+    alignment: space-between;
+    forward-focus: fs;
+    padding: margin;
+
+    VerticalLayout { 
+        StatusText {
+            text: time-string;
+        }
+        StatusText {
+            font-size: 2rem;
+            text: date-string;
+        }
+    }
+    HorizontalLayout {
+        power-off := StatusIcon {
+            image-source: @image-url("system-shutdown.svg");
+
+            fs := FocusScope {
+                focus-changed-event => {
+                    parent.selected = self.has-focus
+                }
+                key-released(event) => {
+                    if (event.text == Key.DownArrow) {
+                        self.clear-focus();
+                        root.focus-cleared();
+                        accept
+                    } else if (event.text == Key.Return) {
+                        root.exit();
+                        accept
+                    } else {
+                        reject
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component Launcher inherits Window {
+    default-font-family: "Oxygen";
+    title: "Flix Launcher";
+
+    in property <image> wallpaper;
+    in property <[App]> apps;
+    in property <string> time-string;
+    in property <string> date-string;
+
+
+    callback launch-command(command: string);
+    callback exit();
+
+    Image {
+        source: wallpaper;
+        image-fit: cover;
+        width: parent.width;
+        height: parent.height;
+        x: 0;
+        y: 0;
+    }
+
+    forward-focus: appFocusScope;
+
+    mainLayout := VerticalLayout {
+        property <length> margin: parent.width * 0.06666;
+
+        width: parent.width;
+        alignment: LayoutAlignment.start;
+        height: parent.height;
+        
+
+        statusBar := StatusBar {
+            margin: parent.margin;
+            width: root.width;
+            time-string: root.time-string;
+            date-string: root.date-string;
+            focus-cleared => { appFocusScope.focus() }
+            exit => { exit() }
+        }
+
+        applications := Flickable {
+            forward-focus: appFocusScope;
+            interactive: false;
+
+            animate viewport-x {
+                 duration: 300ms;
+            }
+
+            appsLayout := HorizontalLayout {
+                padding: margin;
+                accessible-role: AccessibleRole.list-item;
+                spacing: margin / 4;
+                property <int> selectedTile;
+                property <length> tile-height: root.height * 0.2;
+                property <length> tile-width: tile-height / 0.6;
+                
+                for app[index] in root.apps: tiles := Tile {
+                    app: app;
+                    y: (parent.height - self.height) / 2;
+                    width: tile-width;
+                    height: tile-height;
+                    selected: selectedTile == index;
+                    highlighted: selectedTile == index && appFocusScope.has-focus;
+                }
+
+                function selectNext() {
+                    if (selectedTile < root.apps.length - 1) {
+                        selectedTile += 1;
+                        if (selectedTile * (self.spacing + tile-width) + tile-width > parent.width + parent.viewport-x) {
+                            parent.viewport-x = parent.viewport-x - self.spacing - tile-width;
+                        }
+                    }
+                }
+
+                function selectPrevious() {
+                    if (selectedTile > 0) {
+                        selectedTile -= 1;
+                        if (selectedTile * (self.spacing + tile-width) < - parent.viewport-x) {
+                            parent.viewport-x = min(parent.viewport-x + self.spacing + tile-width, 0px);
+                        }
+                    }
+                }
+            }
+            appFocusScope := FocusScope {
+                
+                key-released(event) => {
+                    if (event.text == Key.LeftArrow) {
+                        appsLayout.selectPrevious();
+                    } else if (event.text == Key.RightArrow) {
+                        appsLayout.selectNext();
+                    } else if (event.text == Key.Return) {
+                        root.launch-command(root.apps[appsLayout.selectedTile].command);
+                    } else if (event.text == Key.UpArrow) {
+                        statusBar.focus();
+                    }else {
+                        return reject;
+                    }
+                    return accept;
+                }   
+            }
+        }
+    }
+}
+
+
+component LauncherPreview inherits Launcher {
+    height: 900px;
+    width: 1600px;
+
+    apps: [
+        { icon: @image-url("../example/youtube.png"), preferred-color: #fff, },
+        { icon: @image-url("../example/jellyfin.svg"), preferred-color: rgb(51, 60, 68), },
+        { icon: @image-url("../example/steam.svg"), preferred-color: rgb(23, 29, 37), }
+    ];
+    time-string: "12:48 PM";
+    date-string: "August 6, 2024";
+}
