@@ -9,7 +9,7 @@ use chrono::Local;
 use clap::{command, Parser};
 use color::{parse_color, Srgb};
 use serde::Deserialize;
-use slint::{Color, Image, SharedString, VecModel, Weak};
+use slint::{Color, Image, VecModel, Weak};
 
 slint::include_modules!();
 
@@ -32,10 +32,12 @@ struct AppConfig {
 #[derive(Deserialize, Default)]
 struct Config {
     wallpaper: String,
+    text_color: Option<String>,
+    shutdown_command: String,
     apps: Vec<AppConfig>,
 }
 
-fn run_command(command: &SharedString) {
+fn run_command(command: &str) {
     let parts: Vec<_> = command.split(" ").collect();
     let Some((command, args)) = parts.split_first() else {
         return println!("Can't parse command: {}", command);
@@ -103,6 +105,15 @@ fn main() {
         })
         .collect();
     let launcher = Launcher::new().unwrap();
+    if let Some(color_string) = config.text_color {
+        if let Ok(color) = parse_color(&color_string) {
+            let c = color.to_alpha_color::<Srgb>().to_rgba8();
+            launcher.global::<Theme>().set_text_color(Color::from_rgb_u8(c.r, c.g, c.b));
+        }
+        else {
+            println!("Text color is invalid: {color_string}");
+        };
+    };
     launcher.set_wallpaper(
         Image::load_from_path(&conf_dir.join(&config.wallpaper)).expect("To load wallpaper"),
     );
@@ -110,6 +121,7 @@ fn main() {
     launcher.on_launch_command(move |command| {
         run_command(&command);
     });
+    launcher.on_exit(move || { run_command(&config.shutdown_command); });
     let launcher_handle = launcher.as_weak();
     thread::spawn(move || update_time(launcher_handle));
     launcher.run().unwrap();
