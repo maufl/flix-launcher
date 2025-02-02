@@ -19,7 +19,7 @@ slint::include_modules!();
 struct Args {
     /// The location of the configuration file
     #[arg(short, long)]
-    config: String,
+    config: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -66,28 +66,39 @@ fn update_time(launcher_handle: Weak<Launcher>) -> ! {
     }
 }
 
-fn read_config(path: &str) -> (PathBuf, Config) {
-    let paths = [ path, "./flix.toml" ];
+fn read_config(path: Option<String>) -> Option<(PathBuf, Config)> {
+    let paths = if let Some(p) = path {
+        vec![p]
+    } else {
+        vec!["./flix.toml".to_owned()]
+    };
     for path in paths {
-        let Ok(mut path) = Path::new(path).canonicalize() else {
+        let Ok(mut path) = Path::new(&path).canonicalize() else {
             continue;
         };
         let Ok(config) = std::fs::read_to_string(&path) else {
             continue;
         };
-        let Ok(config) = toml::from_str(&config) else {
-            continue;
+        match toml::from_str(&config) {
+            Ok(config) => {
+                path.pop();
+                return Some((path, config));
+            }
+            Err(err) => {
+                println!("Failed to load configuration from {:?}: {}", path, err);
+                return None;
+            }
         };
-        path.pop();
-        return (path, config);
     }
-    println!("Unable to read configuration");
-    (PathBuf::new(), Config::default())
+    println!("Unable to find a valid configuration");
+    None
 }
 
 fn main() {
     let args = Args::parse();
-    let (conf_dir, config) = read_config(&args.config);
+    let Some((conf_dir, config)) = read_config(args.config) else {
+        return;
+    };
 
     let apps: Vec<App> = config
         .apps
@@ -108,9 +119,10 @@ fn main() {
     if let Some(color_string) = config.text_color {
         if let Ok(color) = parse_color(&color_string) {
             let c = color.to_alpha_color::<Srgb>().to_rgba8();
-            launcher.global::<Theme>().set_text_color(Color::from_rgb_u8(c.r, c.g, c.b));
-        }
-        else {
+            launcher
+                .global::<Theme>()
+                .set_text_color(Color::from_rgb_u8(c.r, c.g, c.b));
+        } else {
             println!("Text color is invalid: {color_string}");
         };
     };
@@ -121,7 +133,9 @@ fn main() {
     launcher.on_launch_command(move |command| {
         run_command(&command);
     });
-    launcher.on_exit(move || { run_command(&config.shutdown_command); });
+    launcher.on_exit(move || {
+        run_command(&config.shutdown_command);
+    });
     let launcher_handle = launcher.as_weak();
     thread::spawn(move || update_time(launcher_handle));
     launcher.run().unwrap();
