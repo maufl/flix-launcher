@@ -4,27 +4,41 @@ export struct App {
     preferred-color: color,
 }
 
+export global Theme {
+    in property <color> text-color: white;
+}
+
 
 component Tile inherits Rectangle {
     in property <App> app;
     in property <bool> selected;
     in property <bool> highlighted;
 
-    border-radius: 4px;
-    background: app.preferred-color;
-    drop-shadow-color: highlighted ? teal : grey;
-    drop-shadow-blur: 12px;
-    accessible-role: AccessibleRole.list-item;
-    accessible-item-selectable: true;
-    accessible-item-selected <=> self.selected;
+    Rectangle {
+        width: root.highlighted ? root.width : root.width * 0.9;
+        height: root.highlighted ? root.height : root.height * 0.9;
 
-    Image {
-        x: parent.height * 0.2;
-        y: parent.height * 0.2;
-        height: parent.height - parent.height * 0.4;
-        width: parent.width - parent.height * 0.4;
-        image-fit: contain;
-        source: app.icon;
+        animate height, width {
+             duration: 100ms;
+        }
+
+
+        border-radius: 4px;
+        background: app.preferred-color;
+        drop-shadow-color: highlighted ? teal : grey;
+        drop-shadow-blur: 12px;
+        accessible-role: AccessibleRole.list-item;
+        accessible-item-selectable: true;
+        accessible-item-selected <=> root.selected;
+
+        Image {
+            x: parent.height * 0.2;
+            y: parent.height * 0.2;
+            height: parent.height - parent.height * 0.4;
+            width: parent.width - parent.height * 0.4;
+            image-fit: contain;
+            source: app.icon;
+        }
     }
 }
 
@@ -38,7 +52,7 @@ component StatusText inherits Rectangle {
         x: 0;
         vertical-alignment: center;
         height: 5rem;
-        color: white;
+        color: Theme.text-color;
         font-size: parent.font-size;
         font-weight: 200;
         text: parent.text;
@@ -51,9 +65,9 @@ component StatusIcon inherits Rectangle {
     in property <image> image-source;
     in property <bool> selected;
 
-    background: selected ? rgba(255,255,255, 0.4) : transparent;
+    background: selected ? rgba(32,32,32, 0.4) : transparent;
     drop-shadow-blur: 8px;
-    drop-shadow-color: selected ? rgba(255,255,255,0.4) : transparent;
+    drop-shadow-color: selected ? rgba(32,32,32,0.4) : transparent;
     border-radius: 16px;
     height: 3rem;
     width: 3rem;
@@ -62,6 +76,7 @@ component StatusIcon inherits Rectangle {
         height: 3rem;
         source: image-source;
         image-fit: contain;
+        colorize: Theme.text-color;
     }
 
     @children
@@ -126,6 +141,10 @@ export component Launcher inherits Window {
     callback launch-command(command: string);
     callback exit();
 
+    init => {
+        appFocusScope.focus();
+    }
+
     Image {
         source: wallpaper;
         image-fit: cover;
@@ -167,7 +186,7 @@ export component Launcher inherits Window {
                 accessible-role: AccessibleRole.list-item;
                 spacing: margin / 4;
                 property <int> selectedTile;
-                property <length> tile-height: root.height * 0.2;
+                property <length> tile-height: root.height * 0.18;
                 property <length> tile-width: tile-height / 0.6;
                 
                 for app[index] in root.apps: tiles := Tile {
@@ -230,4 +249,9 @@ component LauncherPreview inherits Launcher {
     ];
     time-string: "12:48 PM";
     date-string: "August 6, 2024";
+    wallpaper: @image-url("../example/wallpaper.jpeg");
+
+    init => {
+        Theme.text-color = Colors.black;
+    }
 }
