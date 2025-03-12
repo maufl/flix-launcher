@@ -22,6 +22,7 @@ pkgs.rustPlatform.buildRustPackage rec {
     expat
     fontconfig
     libGL
+    libxkbcommon
     wayland
     xorg.libX11
     xorg.libXcursor
@@ -36,6 +37,7 @@ pkgs.rustPlatform.buildRustPackage rec {
         lib.makeLibraryPath [
           pkgs.fontconfig
           pkgs.libGL
+          pkgs.libxkbcommon
           pkgs.wayland
         ]
       }
